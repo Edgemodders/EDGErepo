@@ -17,7 +17,7 @@ The commands and the settings in `nexus.json` are at the top of [nexus.mjs](tool
 
 ```yaml
 - name: The Nexus tool
-  run: git clone --quiet --depth 1 --branch v1 https://github.com/Edgemodders/EDGErepo "$RUNNER_TEMP/EDGErepo"
+  run: git -c advice.detachedHead=false clone --quiet --depth 1 --branch v1 https://github.com/Edgemodders/EDGErepo "$RUNNER_TEMP/EDGErepo"
 
 - name: Nexus Mods can take this release
   env:

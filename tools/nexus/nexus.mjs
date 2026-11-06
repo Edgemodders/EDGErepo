@@ -124,10 +124,11 @@ function previousReleaseDescription(config, version) {
   const prefix = config.tag ?? 'v';
   try {
     const git = (...a) => execFileSync('git', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    const top = git('rev-parse', '--show-toplevel');
     const tag = git('tag', '--list', `${prefix}*`, '--sort=-v:refname').split('\n').find((t) => t && t !== `${prefix}${version}`);
     if (!tag) return null;
-    return { tag, text: git('show', `${tag}:${relative(top, descFile).replace(/\\/g, '/')}`) };
+    // Relative to this folder, which git reads as written: its own --show-toplevel can spell the same
+    // folder differently (a short 8.3 name such as RUNNER~1, or another drive letter case).
+    return { tag, text: git('show', `${tag}:./${relative(process.cwd(), descFile).replace(/\\/g, '/')}`) };
   } catch {
     return null; // no git, no tag, or the file was not there then
   }

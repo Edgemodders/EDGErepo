@@ -10,3 +10,4 @@ The Nexus tool, from REDnode's copy, with these changes:
 - `pull --ids-only` keeps the repo's description, from EDGEwave's copy. Some tools' docs already named it, but their copies ignored it.
 - A run from a folder with no `nexus.json` says so.
 - A failed run ends with exit code 1. It used to end with a crash code on Windows.
+- The previous release's description is found however the repo's folder path is written, such as a short `RUNNER~1` name.

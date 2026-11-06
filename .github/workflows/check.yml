@@ -1,0 +1,20 @@
+# The shared scripts' own checks, against a stand-in for Nexus's API. No key: nothing reaches Nexus.
+name: Check
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # The release workflows that clone these scripts run on Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: node tools/nexus/check.mjs

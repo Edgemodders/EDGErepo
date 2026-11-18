@@ -8,8 +8,11 @@
 //         replace the live one at the next release)
 //   node ../EDGErepo/tools/nexus/nexus.mjs status [dir]
 //         the page's version and files, and whether its description matches the repo
-//   node ../EDGErepo/tools/nexus/nexus.mjs check  [dir] --version <v> [--file <key>=<version>]...
-//         what a release would do, and whether it may: stops when the description changed on Nexus
+//   node ../EDGErepo/tools/nexus/nexus.mjs check  [dir] --version <v> [--file <key>=<version>]... [--notes <file>]
+//         what a release would do, and whether it may: stops when the description changed on Nexus,
+//         or when the notes are not a short summary (below, notesProblems)
+//   node ../EDGErepo/tools/nexus/nexus.mjs notes --notes <file>
+//         only the notes' check, offline
 //   node ../EDGErepo/tools/nexus/nexus.mjs release [dir] --version <v> --zip <file> [--notes <file>]
 //         [--file <key>=<zip>@<version>]... [--dry-run]
 //         uploads the zip as the main file's new version (the old one archived), or as the main
@@ -244,8 +247,60 @@ async function plan(version, zip) {
   return { config, mod, files, description };
 }
 
+// A version's changelog on Nexus: each line is one entry, shown as plain text in a small field, so
+// the notes are a short summary (the owner's rule, 2026-11-18), not a changelog section. Each line
+// starts with one of NOTE_KINDS and has no markdown; at most NOTE_LINE characters a line (a Full
+// changelog line, with its link, up to NOTE_LINK) and NOTE_LINES lines. Nexus cannot edit a
+// changelog once posted, so a release with notes that break this stops before it uploads anything.
+const NOTE_KINDS = ['New', 'Changed', 'Fixed', 'Removed', 'Other', 'Needs', 'Full changelog'];
+const NOTE_LINE = 120;
+const NOTE_LINK = 200;
+const NOTE_LINES = 13;
+
+function notesProblems(text) {
+  const lines = lf(text).split('\n').map((l) => l.trim()).filter(Boolean);
+  const wrong = [];
+  if (lines.length > NOTE_LINES) wrong.push(`${lines.length} lines, at most ${NOTE_LINES}`);
+  for (const line of lines) {
+    const short = line.length > 60 ? `${line.slice(0, 60)}...` : line;
+    const kind = NOTE_KINDS.find((k) => line.startsWith(`${k}: `));
+    if (!kind) wrong.push(`"${short}" does not start with ${NOTE_KINDS.map((k) => `${k}:`).join(', ')}`);
+    const max = kind === 'Full changelog' ? NOTE_LINK : NOTE_LINE;
+    if (line.length > max) wrong.push(`"${short}" is ${line.length} characters, at most ${max}`);
+    if (/`|\*\*|\]\(|^#|^- /.test(line)) wrong.push(`"${short}" has markdown`);
+  }
+  return wrong;
+}
+
+function checkNotes(file) {
+  const text = readFileSync(file, 'utf8').trim();
+  if (!text) return;
+  const wrong = notesProblems(text);
+  if (wrong.length) {
+    throw new Error(
+      `The Nexus changelog in ${file} is not a short summary, so nothing was uploaded:\n- ${wrong.join('\n- ')}\n` +
+        `Nexus shows each line as one entry in a small plain-text field and cannot edit it once posted. Write one short ` +
+        `line per change, such as "New: Hide in the pause menu, on by default", and end with "Full changelog: <link>" ` +
+        `(EDGErepo's README, "Nexus changelogs").`,
+    );
+  }
+}
+
 async function check() {
+  const notesFile = option('notes');
+  if (notesFile) {
+    checkNotes(notesFile);
+    console.log(`Notes: ${notesFile} is a short summary`);
+  }
   await plan(option('version'));
+}
+
+// Only the notes, offline: node nexus.mjs notes --notes <file>
+async function notes() {
+  const notesFile = option('notes');
+  if (!notesFile || !existsSync(notesFile)) throw new Error(`--notes must name the notes file (got ${notesFile})`);
+  checkNotes(notesFile);
+  console.log(`Notes: ${notesFile} is a short summary`);
 }
 
 async function release() {
@@ -255,6 +310,8 @@ async function release() {
   if (!zip || !existsSync(zip)) throw new Error(`--zip must name the archive to upload (got ${zip})`);
   const p = await plan(version, zip);
   for (const f of p.files) if (!f.already && (!f.zip || !existsSync(f.zip))) throw new Error(`${f.up.name}: the archive ${f.zip} is missing`);
+  // Only notes that will be posted: a version already on Nexus posts none.
+  if (notesFile && !p.files[0].already) checkNotes(notesFile);
   if (dryRun) return console.log('Dry run: nothing changed on Nexus');
 
   for (const f of p.files) {
@@ -316,9 +373,9 @@ async function release() {
   }
 }
 
-const commands = { pull, status, check, release };
+const commands = { pull, status, check, release, notes };
 if (!commands[cmd]) {
-  console.error('usage: node nexus.mjs <pull|status|check|release> [dir] [--ids-only] [--version <v>] [--zip <file>] [--notes <file>] [--file <key>=<zip>@<version>] [--dry-run]');
+  console.error('usage: node nexus.mjs <pull|status|check|release|notes> [dir] [--ids-only] [--version <v>] [--zip <file>] [--notes <file>] [--file <key>=<zip>@<version>] [--dry-run]');
   process.exit(1);
 }
 // exitCode, not exit(): on Windows, exit() right after a fetch trips an assertion in Node (a crash code, not 1).

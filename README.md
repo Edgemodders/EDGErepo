@@ -27,6 +27,19 @@ The commands and the settings in `nexus.json` are at the top of [nexus.mjs](tool
 
 That is for a `bash` step. In PowerShell the path is `"$env:RUNNER_TEMP/EDGErepo/tools/nexus/nexus.mjs"`. The clone goes outside the workspace so that no package or zip picks it up. It needs no credentials, since this repo is public.
 
+## Nexus changelogs
+
+Nexus shows each line of a version's changelog as one entry, as plain text in a small field, and its API cannot edit or delete a changelog once posted. So the notes a release posts (`--notes`) are a short summary written by hand, not a changelog section (the owner's rule, 2026-11-18):
+
+| Rule | Detail |
+|---|---|
+| One change a line | Each line starts with `New:`, `Changed:`, `Fixed:`, `Removed:`, `Other:` or `Needs:` (what it needs, such as `Needs: REDnode 0.66.0 or later, game 2.5`) |
+| Short | At most 120 characters a line, at most 13 lines |
+| Plain text | No markdown: no backticks, `**`, `[text](link)`, `#` or `- ` |
+| A link last | `Full changelog: <link>` to the full changelog (up to 200 characters) |
+
+`release` checks the notes before it uploads anything and stops with what is wrong; a version already on Nexus posts no notes, so it checks none. `check --notes <file>` and `notes --notes <file>` (offline, no key) check them earlier. A good place for the summary is the changelog section itself, in an HTML comment that GitHub and Pages hide, as REDnode does (`<!-- nexus` ... `-->` under the version's heading, printed by its `tools/release/notes.mjs --nexus`).
+
 ## The tag
 
 Workflows use the tag `v1`, and every release run takes what `v1` names at that moment. To reach every tool with a change:

@@ -162,6 +162,44 @@ const go = (s, upload, args, env, extra) => run(s, scratch(config(s, upload, ext
   ok(s.uploads === 0 && s.changelogs === 0, 'a rerun uploads nothing', o);
   ok(!/is the page's Primary file/.test(o), 'and checks nothing', o);
 }
+{ // The notes: a short summary, checked before anything is uploaded.
+  const withNotes = (text) => {
+    const s = state([v('1.0', 'main', true)]);
+    const d = scratch(config(s, up()), 'same text');
+    writeFileSync(join(d, 'notes.txt'), text);
+    return { s, d };
+  };
+  const good = 'New: Hide in the pause menu, on by default\nFixed: Update REDbridge kept the old version\nFull changelog: https://example.org/changelog.html\n';
+  const a = withNotes(good);
+  const oa = await run(a.s, a.d, [...release('1.1'), '--notes', 'notes.txt']);
+  ok(a.s.uploads === 1 && a.s.changelogs === 1 && /\[exit 0\]/.test(oa), 'a short summary is posted', oa);
+
+  const long = withNotes(`New: ${'x'.repeat(130)}\n`);
+  const ol = await run(long.s, long.d, [...release('1.1'), '--notes', 'notes.txt']);
+  ok(/\[exit 1\]/.test(ol) && long.s.uploads === 0 && long.s.changelogs === 0, 'a line over 120 characters stops the release before any upload', ol);
+  ok(/135 characters, at most 120/.test(ol) && /nothing was uploaded/.test(ol), 'and says which line and why', ol);
+
+  const md = withNotes('- **Hide in the pause menu**, a switch in the launcher\n');
+  const om = await run(md.s, md.d, [...release('1.1'), '--notes', 'notes.txt']);
+  ok(/\[exit 1\]/.test(om) && /has markdown/.test(om) && /does not start with New:/.test(om), 'a changelog section\'s markdown line stops it', om);
+
+  const many = withNotes(Array.from({ length: 14 }, (_, i) => `Fixed: thing ${i}`).join('\n'));
+  const on = await run(many.s, many.d, [...release('1.1'), '--notes', 'notes.txt']);
+  ok(/14 lines, at most 13/.test(on) && many.s.uploads === 0, 'more than 13 lines stops it', on);
+
+  const again = withNotes(`New: ${'x'.repeat(130)}\n`);
+  again.s.files[0].versions.push(v('1.1', 'main', false, '05'));
+  const og = await run(again.s, again.d, [...release('1.1'), '--notes', 'notes.txt']);
+  ok(/\[exit 0\]/.test(og) && again.s.changelogs === 0, 'a version already on Nexus posts no notes, so they are not checked', og);
+
+  const c = withNotes(`New: ${'x'.repeat(130)}\n`);
+  const oc = await run(c.s, c.d, ['check', '--version', '1.1', '--notes', 'notes.txt']);
+  ok(/\[exit 1\]/.test(oc) && /at most 120/.test(oc), 'check --notes checks them early', oc);
+
+  const n = withNotes(good);
+  const on2 = await run(n.s, n.d, ['notes', '--notes', 'notes.txt']);
+  ok(/is a short summary/.test(on2) && /\[exit 0\]/.test(on2), 'notes checks them offline', on2);
+}
 { // No id in nexus.json: the main file is the page's Primary one, also among several.
   const s = state([], { fileId: null, files: [{ id: 200, name: 'Other', versions: [v('0.1', 'optional')] }, { id: 100, name: 'Tool', versions: [v('1.0', 'main', true)] }] });
   const o = await go(s, up(), ['check', '--version', '1.1']);
@@ -175,7 +213,7 @@ const go = (s, upload, args, env, extra) => run(s, scratch(config(s, upload, ext
   const s = state([v('1.0', 'main', true)]);
   s.files.push({ id: 200, name: 'Voice', versions: [v('0.1', 'optional', false, '02')] });
   const d = scratch(config(s, up(), { files: { voice: { ...voice, file: 200 } } }), 'same text');
-  writeFileSync(join(d, 'notes.txt'), 'What changed');
+  writeFileSync(join(d, 'notes.txt'), 'New: What changed');
   const o = await run(s, d, [...release('1.1'), '--notes', 'notes.txt', '--file', 'voice=a.zip@0.2']);
   const pv = s.posts.find((b) => b.version === '0.2');
   ok(pv?.primary_mod_manager_download === false && pv?.previous_version_id === 'v0.1', 'the other file replaces its own version and is not Primary', o);

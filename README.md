@@ -40,6 +40,10 @@ Nexus shows each line of a version's changelog as one entry, as plain text in a 
 
 `release` checks the notes before it uploads anything and stops with what is wrong; a version already on Nexus posts no notes, so it checks none. `check --notes <file>` and `notes --notes <file>` (offline, no key) check them earlier. A good place for the summary is the changelog section itself, in an HTML comment that GitHub and Pages hide, as REDnode does (`<!-- nexus` ... `-->` under the version's heading, printed by its `tools/release/notes.mjs --nexus`).
 
+## Nexus's field limits
+
+Nexus refuses a file version whose `description` is over 255 characters, whose `name` is over 50 or has other than letters, digits, spaces and `_ ' ( ) . -`, or whose `version` is over 50 or has other than letters, digits, dots and hyphens (its v3 schema, `CreateModFileVersionRequest`, read 2026-11-25). It refuses them at the upload, after a workflow has already published to the Marketplace and GitHub (EDGErepo #1). So `check` and `release` stop on them first, for every file still to upload, with `{version}` filled in, and say which field and by how much. A Nexus error shows its whole reason (up to 2,000 characters), not the first 300.
+
 ## The tag
 
 Workflows use the tag `v1`, and every release run takes what `v1` names at that moment. To reach every tool with a change:

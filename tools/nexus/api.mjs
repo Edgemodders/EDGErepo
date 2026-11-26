@@ -56,7 +56,9 @@ export async function api(method, path, body) {
     // not JSON: keep the text for the error
   }
   if (!res.ok) {
-    const why = json?.message || json?.error || json?.errors?.map?.((e) => e.message || e.detail).join('; ') || text.slice(0, 300);
+    // All of Nexus's reason: a 422 names the field and its limit at the end of a long detail (EDGErepo #1).
+    const errors = Array.isArray(json?.errors) ? json.errors.map((e) => (typeof e === 'string' ? e : [e.message, e.detail, e.pointer ?? e.path].filter(Boolean).join(' '))) : [];
+    const why = [json?.message, json?.error, json?.detail, ...errors].filter((x) => typeof x === 'string' && x).join('; ').slice(0, 2000) || text.slice(0, 2000);
     throw new Error(`${method} ${path}: ${res.status} ${why}`);
   }
   return json && 'data' in json ? json.data : json;

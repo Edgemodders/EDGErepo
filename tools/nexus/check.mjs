@@ -284,6 +284,27 @@ const go = (s, upload, args, env, extra) => run(s, scratch(config(s, upload, ext
   await run(s3, d2, release('1.1'));
   ok(s3.pushed === 'repo text', 'so the next release may push it');
 }
+{ // Nexus's field limits (EDGErepo #1): checked before anything is uploaded.
+  const long = 'x'.repeat(250) + ' {version}';
+  const s = state([v('1.0', 'main', true)]);
+  const o = await go(s, up({ description: long }), release('1.0.10'));
+  ok(/description is 257 characters with the version filled in, at most 255/.test(o) && /\[exit 1\]/.test(o) && s.uploads === 0 && !s.posts.length, 'a description over 255 with the version filled in stops the release before any upload', o);
+  const s2 = state([v('1.0', 'main', true)]);
+  const o2 = await go(s2, up({ description: long }), ['check', '--version', '1.0.10']);
+  ok(/at most 255/.test(o2) && /\[exit 1\]/.test(o2), 'check stops on it too', o2);
+  const s3 = state([v('1.0', 'main', true)]);
+  const o3 = await go(s3, up({ description: 'x'.repeat(249) + ' {version}' }), release('1.1.0'));
+  ok(s3.uploads === 1 && /\[exit 0\]/.test(o3), 'one of 255 exactly goes through', o3);
+  const s4 = state([v('1.0', 'main', true)]);
+  const o4 = await go(s4, up({ name: 'Tool: the long name, with a colon' }), ['check', '--version', '1.1']);
+  ok(/the name may have only letters/.test(o4) && /\[exit 1\]/.test(o4), 'a name with a colon stops', o4);
+  const s5 = state([v('1.0', 'main', true)]);
+  const o5 = await go(s5, up(), ['check', '--version', '1.1+edge']);
+  ok(/version 1\.1\+edge: only letters, digits, dots and hyphens/.test(o5), 'a version with a plus stops', o5);
+  const s6 = state([v('1.0', 'main', true), v('1.0.10', 'main', false, '03')]);
+  const o6 = await go(s6, up({ description: long }), release('1.0.10'));
+  ok(/\[exit 0\]/.test(o6) && s6.uploads === 0, 'a version already on Nexus is not checked: a rerun still ends well', o6);
+}
 { // Status, and running from the wrong folder.
   const voice = { name: 'Voice', category: 'optional' };
   const s = state([v('1.0', 'main', true)]);

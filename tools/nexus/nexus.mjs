@@ -241,10 +241,35 @@ async function plan(version, zip) {
     if (main && !already && !t.up.primary) warn('Nexus Primary file', `nexus.json has "primary": false, so ${t.version} will not become the page's Primary file. Set it to true, also with "modManager": false.`);
     files.push({ ...t, file, already, previous });
   }
+  // Nexus's limits on a file version's fields (its v3 schema, CreateModFileVersionRequest, read
+  // 2026-11-25): it refuses a longer description at the upload, after the Marketplace and the GitHub
+  // release went out (EDGErepo #1), so check them here, before anything is published.
+  const wrong = files.filter((f) => !f.already).flatMap((f) => fieldProblems(f.up, f.version));
+  if (wrong.length) throw new Error(`Nexus would refuse this upload, so nothing was uploaded:\n- ${wrong.join('\n- ')}`);
   // Last, so the files' plan shows even when this stops the release.
   const description = descriptionPlan(mod, config, version);
   console.log(`Description: ${description.push ? 'push' : 'no push'} (${description.why})`);
   return { config, mod, files, description };
+}
+
+const FIELD_LIMITS = { description: 255, name: 50, version: 50 };
+const NAME_PATTERN = /^[a-zA-Z0-9 _'().-]+$/;
+const VERSION_PATTERN = /^[a-zA-Z0-9.-]+$/;
+
+/** What Nexus would refuse in a file's name, description (with {version} filled in) and version. */
+function fieldProblems(up, version) {
+  const wrong = [];
+  const where = `nexus.json's ${up.name ? `"${up.name}"` : 'file'}`;
+  const description = up.description ? up.description.replaceAll('{version}', version) : '';
+  if (description.length > FIELD_LIMITS.description)
+    wrong.push(`${where}: the description is ${description.length} characters with the version filled in, at most ${FIELD_LIMITS.description}`);
+  const name = String(up.name ?? '');
+  if (name.length > FIELD_LIMITS.name) wrong.push(`${where}: the name is ${name.length} characters, at most ${FIELD_LIMITS.name}`);
+  if (name && !NAME_PATTERN.test(name)) wrong.push(`${where}: the name may have only letters, digits, spaces and _ ' ( ) . -`);
+  const v = String(version ?? '');
+  if (v.length > FIELD_LIMITS.version) wrong.push(`version ${v}: ${v.length} characters, at most ${FIELD_LIMITS.version}`);
+  if (v && !VERSION_PATTERN.test(v)) wrong.push(`version ${v}: only letters, digits, dots and hyphens`);
+  return wrong;
 }
 
 // A version's changelog on Nexus: each line is one entry, shown as plain text in a small field, so
